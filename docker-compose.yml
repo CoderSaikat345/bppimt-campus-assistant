@@ -1,0 +1,54 @@
+version: "3.9"
+
+# =============================================================================
+# Local development orchestration for BPPIMT Campus Resource Assistant
+# =============================================================================
+# Usage:
+#   docker compose up --build
+#
+# Services:
+#   frontend  — Next.js dev server on http://localhost:3000
+#   backend   — FastAPI + uvicorn on http://localhost:8000
+# =============================================================================
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev          # Lightweight dev Dockerfile (hot-reload)
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules                 # Anonymous volume prevents host override
+      - /app/.next
+    environment:
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+    env_file:
+      - ./frontend/.env.local            # Git-ignored; contains secrets
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      target: runtime                    # Use the production runtime stage
+    ports:
+      - "8000:8080"
+    environment:
+      - PORT=8080
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - BACKEND_CORS_ORIGINS=http://localhost:3000
+    env_file:
+      - ./backend/.env                   # Git-ignored; contains secrets
+    volumes:
+      # Mount ADC credentials for local Vertex AI / BigQuery access.
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:/secrets/gcp-sa.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

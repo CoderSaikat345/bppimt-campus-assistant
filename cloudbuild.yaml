@@ -1,0 +1,90 @@
+steps:
+  # ==========================================
+  # 1. BUILD IMAGES
+  # ==========================================
+  # Build the Backend Image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build-Backend'
+    args: [
+      'build', 
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/bppimt-repo/backend:$COMMIT_SHA', 
+      '-f', 'backend.Dockerfile', 
+      '.'
+    ]
+    dir: 'backend'
+
+  # Build the Frontend Image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build-Frontend'
+    args: [
+      'build', 
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/bppimt-repo/frontend:$COMMIT_SHA', 
+      '-f', 'frontend.Dockerfile', 
+      '.'
+    ]
+    dir: 'frontend'
+
+  # ==========================================
+  # 2. PUSH IMAGES TO ARTIFACT REGISTRY
+  # ==========================================
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push-Backend'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/bppimt-repo/backend:$COMMIT_SHA']
+    waitFor: ['Build-Backend']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push-Frontend'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/bppimt-repo/frontend:$COMMIT_SHA']
+    waitFor: ['Build-Frontend']
+
+  # ==========================================
+  # 3. DEPLOY TO CLOUD RUN
+  # ==========================================
+  # Deploy the Backend and capture its generated URL
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Deploy-Backend'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Deploying Backend..."
+        gcloud run deploy bppimt-backend \
+          --image us-central1-docker.pkg.dev/$PROJECT_ID/bppimt-repo/backend:$COMMIT_SHA \
+          --region us-central1 \
+          --platform managed \
+          --allow-unauthenticated \
+          --memory 1024Mi \
+          --cpu 1 \
+          --timeout 120s \
+          --service-account bppimt-run-sa@$PROJECT_ID.iam.gserviceaccount.com \
+          --format="value(status.url)" > /workspace/backend_url.txt
+    waitFor: ['Push-Backend']
+
+  # Deploy the Frontend, passing the backend URL dynamically
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Deploy-Frontend'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        BACKEND_URL=$(cat /workspace/backend_url.txt)
+        echo "Deploying Frontend linked to Backend URL: $$BACKEND_URL"
+        
+        gcloud run deploy bppimt-frontend \
+          --image us-central1-docker.pkg.dev/$PROJECT_ID/bppimt-repo/frontend:$COMMIT_SHA \
+          --region us-central1 \
+          --platform managed \
+          --allow-unauthenticated \
+          --memory 512Mi \
+          --cpu 1 \
+          --timeout 60s \
+          --set-env-vars="BACKEND_URL=$$BACKEND_URL" \
+          --service-account bppimt-run-sa@$PROJECT_ID.iam.gserviceaccount.com
+    waitFor: ['Deploy-Backend', 'Push-Frontend']
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/bppimt-repo/backend:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/bppimt-repo/frontend:$COMMIT_SHA'

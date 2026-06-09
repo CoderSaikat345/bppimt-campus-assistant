@@ -1,0 +1,46 @@
+# Node
+node_modules/
+.next/
+.turbo/
+dist/
+out/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Environment secrets — NEVER commit these
+.env
+.env.local
+.env.*.local
+*.env
+
+# Google Cloud credentials
+*.json
+!package.json
+!tsconfig.json
+!tailwind.config.json
+
+# Docker
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Secrets
+backend/secrets/
+*.json
